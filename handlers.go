@@ -921,7 +921,9 @@ func GetStaticHandler(c echo.Context) error {
 	for k, vv := range resp.Header { // duplicate headers are acceptable in HTTP spec, so add all of them individually: https://stackoverflow.com/questions/4371328/are-duplicate-http-response-headers-acceptable
 		k = http.CanonicalHeaderKey(k)
 		for _, v := range vv {
-			c.Response().Header().Add(k, v)
+			if k == "Cache-Control" || k == "Last-Modified" || k == "Expires" {
+				c.Response().Header().Add(k, v)
+			}
 		}
 	}
 
