@@ -280,6 +280,7 @@ type Extractor interface {
 	ExtractResourcesBuildings(pageHTML []byte) (ResourcesBuildings, error)
 	ExtractExpeditionMessages(pageHTML []byte, location *time.Location) ([]ExpeditionMessage, int64, error)
 	ExtractMarketplaceMessages(pageHTML []byte, location *time.Location) ([]MarketplaceMessage, int64, error)
+	ExtractMessages(pageHTML []byte, location *time.Location) ([]Message, int64, error)
 	ExtractDefense(pageHTML []byte) (DefensesInfos, error)
 	ExtractShips(pageHTML []byte) (ShipsInfos, error)
 	ExtractFacilities(pageHTML []byte) (Facilities, error)
@@ -328,6 +329,7 @@ type Extractor interface {
 	ExtractCombatReportMessagesFromDoc(doc *goquery.Document) ([]CombatReportSummary, int64)
 	ExtractExpeditionMessagesFromDoc(doc *goquery.Document, location *time.Location) ([]ExpeditionMessage, int64, error)
 	ExtractEspionageReportFromDoc(doc *goquery.Document, location *time.Location) (EspionageReport, error)
+	ExtractMessagesFromDoc(doc *goquery.Document, location *time.Location) ([]Message, int64, error)
 	ExtractResourcesProductionsFromDoc(doc *goquery.Document) (Resources, error)
 	ExtractPreferencesFromDoc(doc *goquery.Document) Preferences
 	ExtractResourceSettingsFromDoc(doc *goquery.Document) (ResourceSettings, error)

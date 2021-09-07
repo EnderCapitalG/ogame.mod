@@ -752,6 +752,24 @@ func extractCharacterClassFromDocV7(doc *goquery.Document) (CharacterClass, erro
 	return 0, errors.New("character class not found")
 }
 
+func extractMessagesFromDocV7(doc *goquery.Document, location *time.Location) ([]Message, int64, error) {
+	msgs := make([]Message, 0)
+	nbPage, _ := strconv.ParseInt(doc.Find("ul.pagination li").Last().AttrOr("data-page", "1"), 10, 64)
+	doc.Find("li.msg").Each(func(i int, s *goquery.Selection) {
+		if idStr, exists := s.Attr("data-msg-id"); exists {
+			if id, err := strconv.ParseInt(idStr, 10, 64); err == nil {
+				msg := Message{ID: id}
+				msg.CreatedAt, _ = time.ParseInLocation("02.01.2006 15:04:05", s.Find(".msg_date").Text(), location)
+				msg.Title = s.Find(".msg_title a").Text()
+				msg.Content, _ = s.Find("span.msg_content").Html()
+				msg.Content = strings.TrimSpace(msg.Content)
+				msgs = append(msgs, msg)
+			}
+		}
+	})
+	return msgs, nbPage, nil
+}
+
 func extractExpeditionMessagesFromDocV7(doc *goquery.Document, location *time.Location) ([]ExpeditionMessage, int64, error) {
 	msgs := make([]ExpeditionMessage, 0)
 	nbPage, _ := strconv.ParseInt(doc.Find("ul.pagination li").Last().AttrOr("data-page", "1"), 10, 64)

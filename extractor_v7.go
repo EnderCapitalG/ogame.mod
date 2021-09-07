@@ -46,6 +46,12 @@ func (e ExtractorV7) ExtractMarketplaceMessages(pageHTML []byte, location *time.
 	return e.ExtractMarketplaceMessagesFromDoc(doc, location)
 }
 
+// ExtractMessages ...
+func (e ExtractorV7) ExtractMessages(pageHTML []byte, location *time.Location) ([]Message, int64, error) {
+	doc, _ := goquery.NewDocumentFromReader(bytes.NewReader(pageHTML))
+	return e.ExtractMessagesFromDoc(doc, location)
+}
+
 // ExtractDefense ...
 func (e ExtractorV7) ExtractDefense(pageHTML []byte) (DefensesInfos, error) {
 	doc, _ := goquery.NewDocumentFromReader(bytes.NewReader(pageHTML))
@@ -174,6 +180,11 @@ func (e ExtractorV7) ExtractDefenseFromDoc(doc *goquery.Document) (DefensesInfos
 // ExtractExpeditionMessagesFromDoc ...
 func (e ExtractorV7) ExtractExpeditionMessagesFromDoc(doc *goquery.Document, location *time.Location) ([]ExpeditionMessage, int64, error) {
 	return extractExpeditionMessagesFromDocV7(doc, location)
+}
+
+// ExtractMessagesFromDoc ...
+func (e ExtractorV7) ExtractMessagesFromDoc(doc *goquery.Document, location *time.Location) ([]Message, int64, error) {
+	return extractMessagesFromDocV7(doc, location)
 }
 
 // ExtractMarketplaceMessagesFromDoc ...

@@ -2284,6 +2284,17 @@ func (b *OGame) getPageContent(vals url.Values, opts ...Option) ([]byte, error) 
 		if allianceID != "" {
 			return nil
 		}
+
+		if page == "json" && vals.Get("component") == "eventList" && vals.Get("ajax") == "1" {
+			if len(pageHTMLBytes) > 0 {
+				if strings.Contains(string(pageHTMLBytes), "An error has occured!") {
+					return errors.Errorf("An error has occured!")
+				}
+				return nil
+			}
+			return nil
+		}
+
 		if (page != LogoutPage && (IsKnowFullPage(vals) || page == "") && !IsAjaxPage(vals) && !isLogged(pageHTMLBytes)) ||
 			(page == "eventList" && !bytes.Contains(pageHTMLBytes, []byte("eventListWrap"))) ||
 			(page == "fetchEventbox" && !canParseEventBox(pageHTMLBytes)) {
@@ -4462,6 +4473,7 @@ func (b *OGame) sendFleet(celestialID CelestialID, ships []Quantifiable, speed S
 	return Fleet{}, errors.New("could not find new fleet ID")
 }
 
+
 // EspionageReportType type of espionage report (action or report)
 type EspionageReportType int
 
@@ -4513,6 +4525,14 @@ type MarketplaceMessage struct {
 	MarketTransactionID int64
 }
 
+// Message ...
+type Message struct {
+	ID        int64
+	Title     string
+	Content   string
+	CreatedAt time.Time
+}
+
 func (b *OGame) getPageMessages(page, tabid int64) ([]byte, error) {
 	payload := url.Values{
 		"messageId":  {"-1"},
@@ -4522,6 +4542,63 @@ func (b *OGame) getPageMessages(page, tabid int64) ([]byte, error) {
 		"ajax":       {"1"},
 	}
 	return b.postPageContent(url.Values{"page": {"messages"}}, payload)
+}
+
+func (b *OGame) getMessages() ([]Message, error) {
+	msgs := make([]Message, 0)
+	/*
+		Ökonomie
+		tabid: 3 => Ökonomie (economy)
+		tabid: 4 => OGame
+		tabid: 5 => Spielewelt (Game)
+		tabid: 6 => Favoriten (Favorites)
+
+		Communication
+		tabid: 10 => Beiträge (Contributions)
+		tabid: 11 => Shared EspionageReports
+		tabid: 12 => Shared CombatReports
+		tabid: 13 => Shared ExpeditionReports
+		tabid: 14 => Information
+
+		Fleet
+		tabid: 20 => Espionage
+		tabid: 21 => Combat Reports
+		tabid: 22 => Expeditions
+		tabid: 23 => Unions/Transport
+		tabid: 24 => Other
+	*/
+	var tabids []int64
+	// Ökonomie
+	tabids = append(tabids, 3)
+	tabids = append(tabids, 4)
+	tabids = append(tabids, 5)
+	tabids = append(tabids, 6)
+	// Communication
+	tabids = append(tabids, 10)
+	tabids = append(tabids, 11)
+	tabids = append(tabids, 12)
+	tabids = append(tabids, 13)
+	tabids = append(tabids, 14)
+	// Fleet
+	tabids = append(tabids, 20)
+	tabids = append(tabids, 21)
+	tabids = append(tabids, 22)
+	tabids = append(tabids, 23)
+	tabids = append(tabids, 24)
+	var page int64 = 1
+	var nbPage int64 = 1
+	for _, tabid := range tabids {
+		page = 1
+		nbPage = 1
+		for page <= nbPage {
+			pageHTML, _ := b.getPageMessages(page, tabid)
+			newMessages, newNbPage, _ := b.extractor.ExtractMessages(pageHTML, b.location)
+			msgs = append(msgs, newMessages...)
+			nbPage = newNbPage
+			page++
+		}
+	}
+	return msgs, nil
 }
 
 func (b *OGame) getEspionageReportMessages() ([]EspionageReportSummary, error) {
