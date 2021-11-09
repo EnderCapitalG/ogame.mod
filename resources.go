@@ -2,8 +2,9 @@ package ogame
 
 import (
 	"fmt"
+	stdmath "math"
 
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/google/gxui/math"
 )
 
@@ -13,18 +14,21 @@ type ResourcesDetails struct {
 		Available         int64
 		StorageCapacity   int64
 		CurrentProduction int64
+		BaseProduction    float64 // Production per Second
 		// DenCapacity       int
 	}
 	Crystal struct {
 		Available         int64
 		StorageCapacity   int64
 		CurrentProduction int64
+		BaseProduction    float64 // Production per Second
 		// DenCapacity       int
 	}
 	Deuterium struct {
 		Available         int64
 		StorageCapacity   int64
 		CurrentProduction int64
+		BaseProduction    float64 // Production per Second
 		// DenCapacity       int
 	}
 	Energy struct {
@@ -50,6 +54,28 @@ func (r ResourcesDetails) Available() Resources {
 	}
 }
 
+// Production returns the resources currently Produced
+func (r ResourcesDetails) Production() Resources {
+	return Resources{
+		Metal:      r.Metal.CurrentProduction,
+		Crystal:    r.Crystal.CurrentProduction,
+		Deuterium:  r.Deuterium.CurrentProduction,
+		Energy:     r.Energy.CurrentProduction,
+		Darkmatter: 0,
+	}
+}
+
+// Storage returns the resources that can be stored
+func (r ResourcesDetails) Storage() Resources {
+	return Resources{
+		Metal:      r.Metal.StorageCapacity,
+		Crystal:    r.Crystal.StorageCapacity,
+		Deuterium:  r.Deuterium.StorageCapacity,
+		Energy:     0,
+		Darkmatter: 0,
+	}
+}
+
 // Resources represent ogame resources
 type Resources struct {
 	Metal      int64
@@ -61,7 +87,7 @@ type Resources struct {
 
 func (r Resources) String() string {
 	return fmt.Sprintf("[%s|%s|%s]",
-		humanize.Comma(int64(r.Metal)), humanize.Comma(int64(r.Crystal)), humanize.Comma(int64(r.Deuterium)))
+		humanize.Comma(r.Metal), humanize.Comma(r.Crystal), humanize.Comma(r.Deuterium))
 }
 
 // Total returns the sum of resources
@@ -102,7 +128,7 @@ func (r Resources) Mul(scalar int64) Resources {
 }
 
 func min64(values ...int64) int64 {
-	var m int64 = int64(math.MaxInt)
+	m := int64(math.MaxInt)
 	for _, v := range values {
 		if v < m {
 			m = v
@@ -123,7 +149,7 @@ func max64(values ...int64) int64 {
 
 // Div finds how many price a res can afford
 func (r Resources) Div(price Resources) int64 {
-	var nb int64 = int64(math.MaxInt)
+	nb := int64(math.MaxInt)
 	if price.Metal > 0 {
 		nb = r.Metal / price.Metal
 	}
@@ -133,7 +159,7 @@ func (r Resources) Div(price Resources) int64 {
 	if price.Deuterium > 0 {
 		nb = min64(r.Deuterium/price.Deuterium, nb)
 	}
-	return int64(nb)
+	return nb
 }
 
 // CanAfford alias to Gte
@@ -153,4 +179,22 @@ func (r Resources) Lte(val Resources) bool {
 	return r.Metal <= val.Metal &&
 		r.Crystal <= val.Crystal &&
 		r.Deuterium <= val.Deuterium
+}
+
+// FitsIn get the number of ships required to transport the resource
+func (r Resources) FitsIn(ship Ship, techs Researches, probeRaids, isCollector, isPioneers bool) int64 {
+	cargo := ship.GetCargoCapacity(techs, probeRaids, isCollector, isPioneers)
+	if cargo == 0 {
+		return 0
+	}
+	return int64(stdmath.Ceil(float64(r.Total()) / float64(cargo)))
+}
+
+// SubReal subtract v from r
+func (r Resources) SubReal(v Resources) Resources {
+	return Resources{
+		Metal:     r.Metal - v.Metal,
+		Crystal:   r.Crystal - v.Crystal,
+		Deuterium: r.Deuterium - v.Deuterium,
+	}
 }

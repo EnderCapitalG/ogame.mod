@@ -4,16 +4,37 @@ import "strconv"
 
 // DefensesInfos represent a planet defenses information
 type DefensesInfos struct {
-	RocketLauncher         int64
-	LightLaser             int64
-	HeavyLaser             int64
-	GaussCannon            int64
-	IonCannon              int64
-	PlasmaTurret           int64
-	SmallShieldDome        int64
-	LargeShieldDome        int64
-	AntiBallisticMissiles  int64
-	InterplanetaryMissiles int64
+	RocketLauncher         int64 // 401
+	LightLaser             int64 // 402
+	HeavyLaser             int64 // 403
+	GaussCannon            int64 // 404
+	IonCannon              int64 // 405
+	PlasmaTurret           int64 // 406
+	SmallShieldDome        int64 // 407
+	LargeShieldDome        int64 // 408
+	AntiBallisticMissiles  int64 // 502
+	InterplanetaryMissiles int64 // 503
+}
+
+// HasShipDefense returns either or not at least one defense which can attack ships is present i.e., excluding
+// AntiBallisticMissiles
+func (d DefensesInfos) HasShipDefense() bool {
+	return d.CountShipDefenses() > 0
+}
+
+// HasMissilesDefense returns either or not AntiBallisticMissiles are present
+func (d DefensesInfos) HasMissilesDefense() bool {
+	return d.AntiBallisticMissiles > 0
+}
+
+// CountShipDefenses returns the count of defenses which can attack ships i.e., excluding AntiBallisticMissiles
+func (d DefensesInfos) CountShipDefenses() (out int64) {
+	for _, defense := range Defenses {
+		if defense != InterplanetaryMissiles && defense != AntiBallisticMissiles {
+			out += d.ByID(defense.GetID())
+		}
+	}
+	return
 }
 
 // AttackableValue returns the value of the defenses that can be attacked

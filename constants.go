@@ -1,6 +1,10 @@
 package ogame
 
-import "strconv"
+import (
+	"database/sql/driver"
+	"errors"
+	"strconv"
+)
 
 // MissionID represent a mission id
 type MissionID int
@@ -35,7 +39,12 @@ func (m MissionID) String() string {
 }
 
 // Speed represent a fleet speed
-type Speed int
+type Speed float64
+
+// Float64 returns a float64 value of the speed
+func (s Speed) Float64() float64 {
+	return float64(s)
+}
 
 // Int64 returns an integer value of the speed
 func (s Speed) Int64() int64 {
@@ -50,33 +59,68 @@ func (s Speed) Int() int64 {
 
 func (s Speed) String() string {
 	switch s {
+	case FivePercent:
+		return "5%"
 	case TenPercent:
 		return "10%"
+	case FifteenPercent:
+		return "15%"
 	case TwentyPercent:
 		return "20%"
+	case TwentyFivePercent:
+		return "25%"
 	case ThirtyPercent:
 		return "30%"
+	case ThirtyFivePercent:
+		return "35%"
 	case FourtyPercent:
 		return "40%"
+	case FourtyFivePercent:
+		return "45%"
 	case FiftyPercent:
 		return "50%"
+	case FiftyFivePercent:
+		return "55%"
 	case SixtyPercent:
 		return "60%"
+	case SixtyFivePercent:
+		return "65%"
 	case SeventyPercent:
 		return "70%"
+	case SeventyFivePercent:
+		return "75%"
 	case EightyPercent:
 		return "80%"
+	case EightyFivePercent:
+		return "85%"
 	case NinetyPercent:
 		return "90%"
+	case NinetyFivePercent:
+		return "95%"
 	case HundredPercent:
 		return "100%"
 	default:
-		return strconv.FormatInt(int64(s), 10)
+		return strconv.FormatFloat(float64(s), 'f', 1, 64)
 	}
 }
 
 // CelestialType destination type might be planet/moon/debris
 type CelestialType int64
+
+// Scan scan value into Jsonb, implements sql.Scanner interface
+func (j *CelestialType) Scan(value interface{}) error {
+	v, ok := value.(int64)
+	if !ok {
+		return errors.New("Failed to scan CelestialType with value:" + strconv.FormatInt(v, 10))
+	}
+	*j = CelestialType(v)
+	return nil
+}
+
+// Value return json value, implement driver.Valuer interface
+func (j CelestialType) Value() (driver.Value, error) {
+	return j.Int64(), nil
+}
 
 func (d CelestialType) String() string {
 	switch d {
@@ -102,8 +146,38 @@ func (d CelestialType) Int() int64 {
 	return int64(d)
 }
 
+// AllianceClass ...
+type AllianceClass int64
+
+// IsWarrior ...
+func (c AllianceClass) IsWarrior() bool {
+	return c == Warrior
+}
+
+// IsTrader ...
+func (c AllianceClass) IsTrader() bool {
+	return c == Trader
+}
+
+// IsResearcher ...
+func (c AllianceClass) IsResearcher() bool {
+	return c == Researcher
+}
+
 // CharacterClass ...
 type CharacterClass int64
+
+func (c CharacterClass) IsCollector() bool {
+	return c == Collector
+}
+
+func (c CharacterClass) IsGeneral() bool {
+	return c == General
+}
+
+func (c CharacterClass) IsDiscoverer() bool {
+	return c == Discoverer
+}
 
 // OGame constants
 const (
@@ -111,6 +185,11 @@ const (
 	Collector  CharacterClass = 1
 	General    CharacterClass = 2
 	Discoverer CharacterClass = 3
+
+	NoAllianceClass AllianceClass = 0
+	Warrior         AllianceClass = 1
+	Trader          AllianceClass = 2
+	Researcher      AllianceClass = 3
 
 	PlanetType CelestialType = 1
 	DebrisType CelestialType = 2
@@ -197,14 +276,24 @@ const (
 	Expedition         MissionID = 15
 
 	// Speeds
-	TenPercent     Speed = 1
-	TwentyPercent  Speed = 2
-	ThirtyPercent  Speed = 3
-	FourtyPercent  Speed = 4
-	FiftyPercent   Speed = 5
-	SixtyPercent   Speed = 6
-	SeventyPercent Speed = 7
-	EightyPercent  Speed = 8
-	NinetyPercent  Speed = 9
-	HundredPercent Speed = 10
+	TenPercent         Speed = 1
+	TwentyPercent      Speed = 2
+	ThirtyPercent      Speed = 3
+	FourtyPercent      Speed = 4
+	FiftyPercent       Speed = 5
+	SixtyPercent       Speed = 6
+	SeventyPercent     Speed = 7
+	EightyPercent      Speed = 8
+	NinetyPercent      Speed = 9
+	HundredPercent     Speed = 10
+	FivePercent        Speed = 0.5 // General class only detailed speeds
+	FifteenPercent     Speed = 1.5
+	TwentyFivePercent  Speed = 2.5
+	ThirtyFivePercent  Speed = 3.5
+	FourtyFivePercent  Speed = 4.5
+	FiftyFivePercent   Speed = 5.5
+	SixtyFivePercent   Speed = 6.5
+	SeventyFivePercent Speed = 7.5
+	EightyFivePercent  Speed = 8.5
+	NinetyFivePercent  Speed = 9.5
 )

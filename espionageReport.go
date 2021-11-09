@@ -7,6 +7,8 @@ type EspionageReport struct {
 	Resources
 	ID                           int64
 	Username                     string
+	CharacterClass               CharacterClass `gorm:"embedded"`	
+	AllianceClass                AllianceClass
 	LastActivity                 int64
 	CounterEspionage             int64
 	APIKey                       string
@@ -81,8 +83,8 @@ type EspionageReport struct {
 	Crawler                      *int64
 	Reaper                       *int64
 	Pathfinder                   *int64
-	Coordinate                   Coordinate
-	Type                         EspionageReportType
+	Coordinate                   Coordinate          `gorm:"embedded"`
+	Type                         EspionageReportType `gorm:"embedded"`
 	Date                         time.Time
 }
 
@@ -223,4 +225,14 @@ func (r EspionageReport) Loot(characterClass CharacterClass) Resources {
 		Crystal:   int64(float64(r.Crystal) * plunderRatio),
 		Deuterium: int64(float64(r.Deuterium) * plunderRatio),
 	}
+}
+
+// IsDefenceless returns either or not the scanned planet has any defense (either ships or defense) against an attack
+// with ships. If no ShipsInfos or DefensesInfos is including in the espionage report due to the lack of enough probes,
+// the planet is assumed to be not defenceless.
+func (r EspionageReport) IsDefenceless() bool {
+	return r.HasFleetInformation &&
+		r.HasDefensesInformation &&
+		!r.ShipsInfos().HasShips() &&
+		!r.DefensesInfos().HasShipDefense()
 }

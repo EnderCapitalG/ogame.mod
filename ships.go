@@ -7,23 +7,23 @@ import (
 
 // ShipsInfos represent a planet ships information
 type ShipsInfos struct {
-	LightFighter   int64
-	HeavyFighter   int64
-	Cruiser        int64
-	Battleship     int64
-	Battlecruiser  int64
-	Bomber         int64
-	Destroyer      int64
-	Deathstar      int64
-	SmallCargo     int64
-	LargeCargo     int64
-	ColonyShip     int64
-	Recycler       int64
-	EspionageProbe int64
-	SolarSatellite int64
-	Crawler        int64
-	Reaper         int64
-	Pathfinder     int64
+	LightFighter   int64 // 204
+	HeavyFighter   int64 // 205
+	Cruiser        int64 // 206
+	Battleship     int64 // 207
+	Battlecruiser  int64 // 215
+	Bomber         int64 // 211
+	Destroyer      int64 // 213
+	Deathstar      int64 // 214
+	SmallCargo     int64 // 202
+	LargeCargo     int64 // 203
+	ColonyShip     int64 // 208
+	Recycler       int64 // 209
+	EspionageProbe int64 // 210
+	SolarSatellite int64 // 212
+	Crawler        int64 // 217
+	Reaper         int64 // 218
+	Pathfinder     int64 // 219
 }
 
 // ToPtr returns a pointer to self
@@ -47,6 +47,24 @@ func (s ShipsInfos) HasShips() bool {
 	for _, ship := range Ships {
 		if s.ByID(ship.GetID()) > 0 {
 			return true
+		}
+	}
+	return false
+}
+
+// HasMovableShips returns either or not at least one ship that can be moved is present
+func (s ShipsInfos) HasMovableShips() bool {
+	for _, ship := range Ships {
+		if ship.GetID() != SolarSatelliteID || ship.GetID() != CrawlerID {
+
+		}
+		switch ship.GetID() {
+		case SolarSatelliteID:
+		case CrawlerID:
+		default:
+			if s.ByID(ship.GetID()) > 0 {
+				return true
+			}
 		}
 	}
 	return false
@@ -95,9 +113,17 @@ func (s ShipsInfos) FromQuantifiables(in []Quantifiable) (out ShipsInfos) {
 }
 
 // Cargo returns the total cargo of the ships
-func (s ShipsInfos) Cargo(techs Researches, probeRaids, isCollector bool) (out int64) {
+func (s ShipsInfos) Cargo(techs Researches, probeRaids, isCollector, isPioneers bool) (out int64) {
 	for _, ship := range Ships {
-		out += ship.GetCargoCapacity(techs, probeRaids, isCollector) * s.ByID(ship.GetID())
+		out += ship.GetCargoCapacity(techs, probeRaids, isCollector, isPioneers) * s.ByID(ship.GetID())
+	}
+	return
+}
+
+// FuelCapacity returns the total Capacity for fuel
+func (s ShipsInfos) FuelCapacity() (out int64) {
+	for _, ship := range Ships {
+		out += ship.GetFuelCapacity() * s.ByID(ship.GetID())
 	}
 	return
 }
@@ -144,6 +170,16 @@ func (s *ShipsInfos) Add(v ShipsInfos) {
 		shipID := ship.GetID()
 		s.Set(shipID, s.ByID(shipID)+v.ByID(shipID))
 	}
+}
+
+// AddShips adds some ships
+func (s *ShipsInfos) AddShips(shipID ID, nb int64) {
+	s.Set(shipID, s.ByID(shipID)+nb)
+}
+
+// SubShips subtracts some ships
+func (s *ShipsInfos) SubShips(shipID ID, nb int64) {
+	s.AddShips(shipID, -1*nb)
 }
 
 // ByID get number of ships by ship id

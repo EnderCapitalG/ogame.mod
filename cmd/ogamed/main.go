@@ -2,11 +2,14 @@ package main
 
 import (
 	"crypto/subtle"
+	"html/template"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 
-	"github.com/alaingilbert/ogame"
+	"github.com/0xE232FE/ogame.mod"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"gopkg.in/urfave/cli.v2"
@@ -74,6 +77,7 @@ func main() {
 			Value:   "",
 			EnvVars: []string{"OGAMED_PROXY"},
 		},
+
 		&cli.StringFlag{
 			Name:    "proxy-username",
 			Usage:   "Proxy username",
@@ -148,9 +152,15 @@ func main() {
 		},
 		&cli.BoolFlag{
 			Name:    "cors-enabled",
-			Usage:   "Enable CORS",
+			Usage:   "Enabled CORS",
 			Value:   true,
 			EnvVars: []string{"CORS_ENABLED"},
+		},
+		&cli.StringFlag{
+			Name:    "nja-api-key",
+			Usage:   "Ninja API key",
+			Value:   "",
+			EnvVars: []string{"NJA_API_KEY"},
 		},
 	}
 	app.Action = start
@@ -168,10 +178,10 @@ func start(c *cli.Context) error {
 	host := c.String("host")
 	port := c.Int("port")
 	proxyAddr := c.String("proxy")
-	proxyUsername := c.String("proxy-username")
-	proxyPassword := c.String("proxy-password")
 	proxyType := c.String("proxy-type")
 	proxyLoginOnly := c.Bool("proxy-login-only")
+	proxyUsername := c.String("proxy-username")
+	proxyPassword := c.String("proxy-password")
 	lobby := c.String("lobby")
 	apiNewHostname := c.String("api-new-hostname")
 	enableTLS := c.Bool("enable-tls")
@@ -181,8 +191,9 @@ func start(c *cli.Context) error {
 	basicAuthPassword := c.String("basic-auth-password")
 	cookiesFilename := c.String("cookies-filename")
 	corsEnabled := c.Bool("cors-enabled")
+	njaApiKey := c.String("nja-api-key")
 
-	bot, err := ogame.NewWithParams(ogame.Params{
+	params := ogame.Params{
 		Universe:        universe,
 		Username:        username,
 		Password:        password,
@@ -196,12 +207,23 @@ func start(c *cli.Context) error {
 		Lobby:           lobby,
 		APINewHostname:  apiNewHostname,
 		CookiesFilename: cookiesFilename,
-	})
+	}
+	if njaApiKey != "" {
+		params.CaptchaCallback = ogame.NinjaSolver(njaApiKey)
+	}
+
+	bot, err := ogame.NewWithParams(params)
 	if err != nil {
 		return err
 	}
 
 	e := echo.New()
+
+	t := &TemplateRenderer{
+		templates: template.Must(template.ParseGlob("template/*.html")),
+	}
+	e.Renderer = t
+
 	if corsEnabled {
 		e.Use(middleware.CORS())
 	}
@@ -227,10 +249,25 @@ func start(c *cli.Context) error {
 	}
 	e.HideBanner = true
 	e.HidePort = true
-	e.Debug = false
+	e.Debug = true
 	e.GET("/", ogame.HomeHandler)
 	e.GET("/tasks", ogame.TasksHandler)
+	e.GET("/transfer", ogame.GetTransferHandler)
+	e.GET("/api/v1/servers", ogame.GetServersHandler)
+
+	// CAPTCHA Handler
+	e.GET("/bot/captcha", ogame.GetCaptchaHandler)
+	e.GET("/bot/captcha/icons/:challengeID", ogame.GetCaptchaImgHandler)
+	e.GET("/bot/captcha/question/:challengeID", ogame.GetCaptchaTextHandler)
+	e.POST("/bot/captcha/solve", ogame.GetCaptchaSolverHandler)
+
+	e.GET("/empire", HTMLEmpire)
+	e.GET("/flights", HTMLFlights)
+	e.GET("/planet", HTMLPlanet)
+	e.GET("/browser", HTMLBrowser)
+	e.GET("/bot/captcha", ogame.GetCaptchaHandler)
 	e.GET("/bot/server", ogame.GetServerHandler)
+	e.GET("/bot/server-data", ogame.GetServerDataHandler)
 	e.POST("/bot/set-user-agent", ogame.SetUserAgentHandler)
 	e.GET("/bot/server-url", ogame.ServerURLHandler)
 	e.GET("/bot/language", ogame.GetLanguageHandler)
@@ -245,7 +282,14 @@ func start(c *cli.Context) error {
 	e.GET("/bot/server/version", ogame.ServerVersionHandler)
 	e.GET("/bot/server/time", ogame.ServerTimeHandler)
 	e.GET("/bot/is-under-attack", ogame.IsUnderAttackHandler)
+	e.GET("/bot/is-vacation-mode", ogame.IsVacationModeHandler)
 	e.GET("/bot/user-infos", ogame.GetUserInfosHandler)
+	e.GET("/bot/character-class", ogame.GetCharacterClassHandler)
+	e.GET("/bot/has-commander", ogame.HasCommanderHandler)
+	e.GET("/bot/has-admiral", ogame.HasAdmiralHandler)
+	e.GET("/bot/has-engineer", ogame.HasEngineerHandler)
+	e.GET("/bot/has-geologist", ogame.HasGeologistHandler)
+	e.GET("/bot/has-technocrat", ogame.HasTechnocratHandler)
 	e.POST("/bot/send-message", ogame.SendMessageHandler)
 	e.GET("/bot/fleets", ogame.GetFleetsHandler)
 	e.GET("/bot/fleets/slots", ogame.GetSlotsHandler)
@@ -268,9 +312,12 @@ func start(c *cli.Context) error {
 	e.GET("/bot/moons/:galaxy/:system/:position", ogame.GetMoonByCoordHandler)
 	e.GET("/bot/celestials/:celestialID/items", ogame.GetCelestialItemsHandler)
 	e.GET("/bot/celestials/:celestialID/items/:itemRef/activate", ogame.ActivateCelestialItemHandler)
+	e.GET("/bot/celestials/:celestialID/techs", ogame.TechsHandler)
+	e.GET("/bot/celestials/:celestialID/abandon", ogame.AbandonHandler)
 	e.GET("/bot/planets", ogame.GetPlanetsHandler)
 	e.GET("/bot/planets/:planetID", ogame.GetPlanetHandler)
 	e.GET("/bot/planets/:galaxy/:system/:position", ogame.GetPlanetByCoordHandler)
+	e.GET("/bot/planets/:planetID/resources-details", ogame.GetResourcesDetailsHandler)
 	e.GET("/bot/planets/:planetID/resource-settings", ogame.GetResourceSettingsHandler)
 	e.POST("/bot/planets/:planetID/resource-settings", ogame.SetResourceSettingsHandler)
 	e.GET("/bot/planets/:planetID/resources-buildings", ogame.GetResourcesBuildingsHandler)
@@ -303,6 +350,7 @@ func start(c *cli.Context) error {
 	// For AntiGame plugin
 	// Static content
 	e.GET("/cdn/*", ogame.GetStaticHandler)
+	e.GET("/assets/css/*", ogame.GetStaticHandler)
 	e.GET("/headerCache/*", ogame.GetStaticHandler)
 	e.GET("/favicon.ico", ogame.GetStaticHandler)
 	e.GET("/game/sw.js", ogame.GetStaticHandler)
@@ -317,10 +365,152 @@ func start(c *cli.Context) error {
 	e.GET("/api/*", ogame.GetStaticHandler)
 	e.HEAD("/api/*", ogame.GetStaticHEADHandler) // AntiGame uses this to check if the cached XML files need to be refreshed
 
+	go func() {
+		/*
+			planets := bot.GetCachedPlanets()
+			bot.GetResourcesBuildings(planets[0].ID.Celestial())
+
+			log.Printf("Resources Buildings: %d", bot.PlanetResources[planets[0].ID.Celestial()].Metal.Available)
+			log.Printf("Resources Buildings: %s", bot.PlanetResourcesBuildings[planets[0].ID.Celestial()])
+
+			time.Sleep(time.Duration(60) * time.Second)
+
+			log.Printf("Facilities: %s", bot.PlanetFacilities[planets[0].ID.Celestial()])
+		*/
+	}()
+
 	if enableTLS {
 		log.Println("Enable TLS Support")
 		return e.StartTLS(host+":"+strconv.Itoa(port), tlsCertFile, tlsKeyFile)
 	}
 	log.Println("Disable TLS Support")
 	return e.Start(host + ":" + strconv.Itoa(port))
+}
+
+// TemplateRenderer is a custom html/template renderer for Echo framework
+type TemplateRenderer struct {
+	templates *template.Template
+}
+
+// Render renders a template document
+func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+
+	// Add global methods if data is a map
+	if viewContext, isMap := data.(map[string]interface{}); isMap {
+		viewContext["reverse"] = c.Echo().Reverse
+	}
+
+	return t.templates.ExecuteTemplate(w, name, data)
+}
+
+func HTMLEmpire(c echo.Context) error {
+	bot := c.Get("bot").(*ogame.OGame)
+	var objs ogame.ObjsStruct
+	var data = struct {
+		Bot          *ogame.OGame
+		Objs         ogame.ObjsStruct
+		Buildings    []ogame.Building
+		Ships        []ogame.Ship
+		Technologies []ogame.Technology
+	}{
+		Bot:          bot,
+		Objs:         objs,
+		Buildings:    ogame.Buildings,
+		Ships:        ogame.Ships,
+		Technologies: ogame.Technologies,
+	}
+
+	return c.Render(http.StatusOK, "empire", data)
+}
+
+func HTMLPlanet(c echo.Context) error {
+	bot := c.Get("bot").(*ogame.OGame)
+	var objs ogame.ObjsStruct
+
+	planet, _ := strconv.ParseInt(c.QueryParam("id"), 10, 64)
+	var data = struct {
+		Bot             *ogame.OGame
+      
+		PlanetID        ogame.PlanetID
+		Objs            ogame.ObjsStruct
+		Buildings       []ogame.Building
+		PlanetBuildings []ogame.Building
+		Ships           []ogame.Ship
+		Defenses        []ogame.Defense
+		Technologies    []ogame.Technology
+		Researches      ogame.Researches
+      
+	}{
+		Bot:             bot,
+      
+		PlanetID:        ogame.PlanetID(planet),
+		Objs:            objs,
+		Buildings:       ogame.Buildings,
+		PlanetBuildings: ogame.PlanetBuildings,
+		Ships:           ogame.Ships,
+		Defenses:        ogame.Defenses,
+		Technologies:    ogame.Technologies,
+		Researches:      bot.GetResearch(),
+      
+	}
+
+	return c.Render(http.StatusOK, "planet", data)
+}
+
+func HTMLFlights(c echo.Context) error {
+	bot := c.Get("bot").(*ogame.OGame)
+	var objs ogame.ObjsStruct
+	var planetOrigin ogame.Planet
+	var planetDestination ogame.Planet
+
+	origin, _ := strconv.ParseInt(c.QueryParam("origin"), 10, 64)
+	planetOrigin, _ = bot.GetPlanet(origin)
+	destination, _ := strconv.ParseInt(c.QueryParam("destination"), 10, 64)
+	planetDestination, _ = bot.GetPlanet(destination)
+
+	var data = struct {
+		Bot          *ogame.OGame
+		PlanetShips  ogame.ShipsInfos
+		Objs         ogame.ObjsStruct
+		Buildings    []ogame.Building
+		Ships        []ogame.Ship
+		Technologies []ogame.Technology
+		Origin       ogame.Planet
+		Destination  ogame.Planet
+	}{
+		Bot:          bot,
+      /*
+		PlanetShips:  bot.PlanetShipsInfos[ogame.CelestialID(origin)],
+      */
+		Objs:         objs,
+		Buildings:    ogame.Buildings,
+		Ships:        ogame.Ships,
+		Technologies: ogame.Technologies,
+		Origin:       planetOrigin,
+		Destination:  planetDestination,
+      
+	}
+
+	return c.Render(http.StatusOK, "flights", data)
+}
+
+func HTMLBrowser(c echo.Context) error {
+	bot := c.Get("bot").(*ogame.OGame)
+	var objs ogame.ObjsStruct
+
+	var data = struct {
+		Bot          *ogame.OGame
+		Objs         ogame.ObjsStruct
+		Buildings    []ogame.Building
+		Ships        []ogame.Ship
+		Technologies []ogame.Technology
+	}{
+		Bot:          bot,
+		Objs:         objs,
+		Buildings:    ogame.Buildings,
+		Ships:        ogame.Ships,
+		Technologies: ogame.Technologies,
+	}
+
+	return c.Render(http.StatusOK, "browser", data)
 }

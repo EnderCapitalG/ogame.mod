@@ -13,6 +13,11 @@ import (
 	"github.com/alaingilbert/clockwork"
 )
 
+func getNameV7(doc *goquery.Document, name string) string {
+	val := doc.Find("span."+name).First().AttrOr("aria-label", "0")
+	return val
+}
+
 func getNbrV7(doc *goquery.Document, name string) int64 {
 	val, _ := strconv.ParseInt(doc.Find("span."+name+" span.level").First().AttrOr("data-value", "0"), 10, 64)
 	return val
@@ -21,6 +26,41 @@ func getNbrV7(doc *goquery.Document, name string) int64 {
 func getNbrV7Ships(doc *goquery.Document, name string) int64 {
 	val, _ := strconv.ParseInt(doc.Find("span."+name+" span.amount").First().AttrOr("data-value", "0"), 10, 64)
 	return val
+}
+
+func extractPremiumTokenV7(pageHTML []byte, days int64) (token string, err error) {
+	rgx := regexp.MustCompile(`\?page=premium&buynow=1&type=\d&days=` + strconv.FormatInt(days, 10) + `&token=(\w+)`)
+	m := rgx.FindSubmatch(pageHTML)
+	if len(m) < 2 {
+		return "", errors.New("unable to find token")
+	}
+	token = string(m[1])
+	return
+}
+
+func extractResourcesDetailsFromFullPageFromDocV7(doc *goquery.Document) ResourcesDetails {
+	out := ResourcesDetails{}
+	out.Metal.Available = ParseInt(strings.Split(doc.Find("span#resources_metal").AttrOr("data-raw", "0"), ".")[0])
+	out.Crystal.Available = ParseInt(strings.Split(doc.Find("span#resources_crystal").AttrOr("data-raw", "0"), ".")[0])
+	out.Deuterium.Available = ParseInt(strings.Split(doc.Find("span#resources_deuterium").AttrOr("data-raw", "0"), ".")[0])
+	out.Energy.Available = ParseInt(doc.Find("span#resources_energy").Text())
+	out.Darkmatter.Available = ParseInt(doc.Find("span#resources_darkmatter").Text())
+	metalDoc, _ := goquery.NewDocumentFromReader(strings.NewReader(doc.Find("li#metal_box").AttrOr("title", "")))
+	crystalDoc, _ := goquery.NewDocumentFromReader(strings.NewReader(doc.Find("li#crystal_box").AttrOr("title", "")))
+	deuteriumDoc, _ := goquery.NewDocumentFromReader(strings.NewReader(doc.Find("li#deuterium_box").AttrOr("title", "")))
+	energyDoc, _ := goquery.NewDocumentFromReader(strings.NewReader(doc.Find("li#energy_box").AttrOr("title", "")))
+	darkmatterDoc, _ := goquery.NewDocumentFromReader(strings.NewReader(doc.Find("li#darkmatter_box").AttrOr("title", "")))
+	out.Metal.StorageCapacity = ParseInt(metalDoc.Find("table tr").Eq(1).Find("td").Eq(0).Text())
+	out.Metal.CurrentProduction = ParseInt(metalDoc.Find("table tr").Eq(2).Find("td").Eq(0).Text())
+	out.Crystal.StorageCapacity = ParseInt(crystalDoc.Find("table tr").Eq(1).Find("td").Eq(0).Text())
+	out.Crystal.CurrentProduction = ParseInt(crystalDoc.Find("table tr").Eq(2).Find("td").Eq(0).Text())
+	out.Deuterium.StorageCapacity = ParseInt(deuteriumDoc.Find("table tr").Eq(1).Find("td").Eq(0).Text())
+	out.Deuterium.CurrentProduction = ParseInt(deuteriumDoc.Find("table tr").Eq(2).Find("td").Eq(0).Text())
+	out.Energy.CurrentProduction = ParseInt(energyDoc.Find("table tr").Eq(1).Find("td").Eq(0).Text())
+	out.Energy.Consumption = ParseInt(energyDoc.Find("table tr").Eq(2).Find("td").Eq(0).Text())
+	out.Darkmatter.Purchased = ParseInt(darkmatterDoc.Find("table tr").Eq(1).Find("td").Eq(0).Text())
+	out.Darkmatter.Found = ParseInt(darkmatterDoc.Find("table tr").Eq(2).Find("td").Eq(0).Text())
+	return out
 }
 
 func extractFacilitiesFromDocV7(doc *goquery.Document) (Facilities, error) {
@@ -105,7 +145,7 @@ func extractResourcesBuildingsFromDocV7(doc *goquery.Document) (ResourcesBuildin
 	res.DeuteriumSynthesizer = getNbrV7(doc, "deuteriumSynthesizer")
 	res.SolarPlant = getNbrV7(doc, "solarPlant")
 	res.FusionReactor = getNbrV7(doc, "fusionPlant")
-	res.SolarSatellite = getNbrV7(doc, "solarSatellite")
+	res.SolarSatellite = getNbrV7Ships(doc, "solarSatellite")
 	res.MetalStorage = getNbrV7(doc, "metalStorage")
 	res.CrystalStorage = getNbrV7(doc, "crystalStorage")
 	res.DeuteriumTank = getNbrV7(doc, "deuteriumStorage")
@@ -248,7 +288,7 @@ func extractCombatReportMessagesFromDocV7(doc *goquery.Document) ([]CombatReport
 					report.APIKey = m[1]
 				}
 				resTitle := s.Find("span.msg_content div.combatLeftSide span").Eq(1).AttrOr("title", "")
-				m = regexp.MustCompile(`([\d.]+)<br/>[^\d]*([\d.]+)<br/>[^\d]*([\d.]+)`).FindStringSubmatch(resTitle)
+				m = regexp.MustCompile(`([\d.,]+)<br/>[^\d]*([\d.,]+)<br/>[^\d]*([\d.,]+)`).FindStringSubmatch(resTitle)
 				if len(m) == 4 {
 					report.Metal = ParseInt(m[1])
 					report.Crystal = ParseInt(m[2])
@@ -257,7 +297,7 @@ func extractCombatReportMessagesFromDocV7(doc *goquery.Document) ([]CombatReport
 				debrisFieldTitle := s.Find("span.msg_content div.combatLeftSide span").Eq(2).AttrOr("title", "0")
 				report.DebrisField = ParseInt(debrisFieldTitle)
 				resText := s.Find("span.msg_content div.combatLeftSide span").Eq(1).Text()
-				m = regexp.MustCompile(`[\d.]+[^\d]*([\d.]+)`).FindStringSubmatch(resText)
+				m = regexp.MustCompile(`[\d.,]+[^\d]*([\d.,]+)`).FindStringSubmatch(resText)
 				if len(m) == 2 {
 					report.Loot = ParseInt(m[1])
 				}
@@ -730,3 +770,4 @@ func extractMarketplaceMessagesFromDocV7(doc *goquery.Document, location *time.L
 	})
 	return msgs, nbPage, nil
 }
+

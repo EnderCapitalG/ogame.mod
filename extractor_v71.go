@@ -19,6 +19,17 @@ func NewExtractorV71() *ExtractorV71 {
 	return &ExtractorV71{}
 }
 
+// ExtractCancelFleetToken ...
+func (e ExtractorV71) ExtractCancelFleetToken(pageHTML []byte, fleetID FleetID) (string, error) {
+	doc, _ := goquery.NewDocumentFromReader(bytes.NewReader(pageHTML))
+	return e.ExtractCancelFleetTokenFromDoc(doc, fleetID)
+}
+
+// ExtractCancelFleetTokenFromDoc ...
+func (e ExtractorV71) ExtractCancelFleetTokenFromDoc(doc *goquery.Document, fleetID FleetID) (string, error) {
+	return extractCancelFleetTokenFromDocV71(doc, fleetID)
+}
+
 // ExtractFacilitiesFromDoc ...
 func (e ExtractorV71) ExtractFacilitiesFromDoc(doc *goquery.Document) (Facilities, error) {
 	return extractFacilitiesFromDocV71(doc)
@@ -35,6 +46,11 @@ func (e ExtractorV71) ExtractResourcesDetails(pageHTML []byte) (out ResourcesDet
 	return extractResourcesDetailsV71(pageHTML)
 }
 
+// ExtractTechs ...
+func (e ExtractorV71) ExtractTechs(pageHTML []byte) (ResourcesBuildings, Facilities, ShipsInfos, DefensesInfos, Researches, error) {
+	return extractTechsV71(pageHTML)
+}
+
 // ExtractEspionageReport ...
 func (e ExtractorV71) ExtractEspionageReport(pageHTML []byte, location *time.Location) (EspionageReport, error) {
 	doc, _ := goquery.NewDocumentFromReader(bytes.NewReader(pageHTML))
@@ -44,6 +60,17 @@ func (e ExtractorV71) ExtractEspionageReport(pageHTML []byte, location *time.Loc
 // ExtractEspionageReportFromDoc ...
 func (e ExtractorV71) ExtractEspionageReportFromDoc(doc *goquery.Document, location *time.Location) (EspionageReport, error) {
 	return extractEspionageReportFromDocV71(doc, location)
+}
+
+// ExtractDestroyRockets ...
+func (e ExtractorV71) ExtractDestroyRockets(pageHTML []byte) (abm, ipm int64, token string, err error) {
+	doc, _ := goquery.NewDocumentFromReader(bytes.NewReader(pageHTML))
+	return e.ExtractDestroyRocketsFromDoc(doc)
+}
+
+// ExtractDestroyRocketsFromDoc ...
+func (e ExtractorV71) ExtractDestroyRocketsFromDoc(doc *goquery.Document) (abm, ipm int64, token string, err error) {
+	return extractDestroyRocketsFromDocV71(doc)
 }
 
 // ExtractIPM ...
@@ -159,6 +186,17 @@ func (e ExtractorV71) ExtractBuffActivation(pageHTML []byte) (string, []Item, er
 // ExtractBuffActivationFromDoc ...
 func (e ExtractorV71) ExtractBuffActivationFromDoc(doc *goquery.Document) (string, []Item, error) {
 	return extractBuffActivationFromDocV71(doc)
+}
+
+// ExtractActiveItems ...
+func (e ExtractorV71) ExtractActiveItems(pageHTML []byte) ([]ActiveItem, error) {
+	doc, _ := goquery.NewDocumentFromReader(bytes.NewReader(pageHTML))
+	return e.ExtractActiveItemsFromDoc(doc)
+}
+
+// ExtractActiveItemsFromDoc ...
+func (e ExtractorV71) ExtractActiveItemsFromDoc(doc *goquery.Document) ([]ActiveItem, error) {
+	return extractActiveItemsFromDocV71(doc)
 }
 
 // ExtractIsMobile ...

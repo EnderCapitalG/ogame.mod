@@ -527,13 +527,13 @@ func extractOfferOfTheDayFromDocV6(doc *goquery.Document) (price int64, importTo
 	}
 	price = ParseInt(s.Text())
 	script := doc.Find("script").Text()
-	m := regexp.MustCompile(`var importToken="([^"]*)";`).FindSubmatch([]byte(script))
+	m := regexp.MustCompile(`var importToken\s?=\s?"([^"]*)";`).FindSubmatch([]byte(script))
 	if len(m) != 2 {
 		err = errors.New("failed to extract offer of the day import token")
 		return
 	}
 	importToken = string(m[1])
-	m = regexp.MustCompile(`var planetResources=({[^;]*});`).FindSubmatch([]byte(script))
+	m = regexp.MustCompile(`var planetResources\s?=\s?({[^;]*});`).FindSubmatch([]byte(script))
 	if len(m) != 2 {
 		err = errors.New("failed to extract offer of the day raw planet resources")
 		return
@@ -541,7 +541,7 @@ func extractOfferOfTheDayFromDocV6(doc *goquery.Document) (price int64, importTo
 	if err = json.Unmarshal(m[1], &planetResources); err != nil {
 		return
 	}
-	m = regexp.MustCompile(`var multiplier=({[^;]*});`).FindSubmatch([]byte(script))
+	m = regexp.MustCompile(`var multiplier\s?=\s?({[^;]*});`).FindSubmatch([]byte(script))
 	if len(m) != 2 {
 		err = errors.New("failed to extract offer of the day raw multiplier")
 		return
@@ -683,7 +683,7 @@ func extractCombatReportMessagesFromDocV6(doc *goquery.Document) ([]CombatReport
 					report.Destination.Type = PlanetType
 				}
 				resTitle := s.Find("span.msg_content div.combatLeftSide span").Eq(1).AttrOr("title", "")
-				m := regexp.MustCompile(`([\d.]+)<br/>[^\d]*([\d.]+)<br/>[^\d]*([\d.]+)`).FindStringSubmatch(resTitle)
+				m := regexp.MustCompile(`([\d.,]+)<br/>[^\d]*([\d.,]+)<br/>[^\d]*([\d.,]+)`).FindStringSubmatch(resTitle)
 				if len(m) == 4 {
 					report.Metal = ParseInt(m[1])
 					report.Crystal = ParseInt(m[2])
@@ -692,7 +692,7 @@ func extractCombatReportMessagesFromDocV6(doc *goquery.Document) ([]CombatReport
 				debrisFieldTitle := s.Find("span.msg_content div.combatLeftSide span").Eq(2).AttrOr("title", "0")
 				report.DebrisField = ParseInt(debrisFieldTitle)
 				resText := s.Find("span.msg_content div.combatLeftSide span").Eq(1).Text()
-				m = regexp.MustCompile(`[\d.]+[^\d]*([\d.]+)`).FindStringSubmatch(resText)
+				m = regexp.MustCompile(`[\d.,]+[^\d]*([\d.,]+)`).FindStringSubmatch(resText)
 				if len(m) == 2 {
 					report.Loot = ParseInt(m[1])
 				}
@@ -1025,6 +1025,7 @@ func extractPreferencesFromDocV6(doc *goquery.Document) Preferences {
 		EconomyNotifications:         extractEconomyNotificationsFromDocV6(doc),
 		ShowActivityMinutes:          extractShowActivityMinutesFromDocV6(doc),
 		PreserveSystemOnPlanetChange: extractPreserveSystemOnPlanetChangeFromDocV6(doc),
+		UrlaubsModus:                 extractUrlaubsModus(doc),
 	}
 	if prefs.MobileVersion {
 		prefs.Notifications.BuildList = extractNotifBuildListFromDocV6(doc)
@@ -1121,7 +1122,7 @@ func extractIPMFromDocV6(doc *goquery.Document) (duration, max int64, token stri
 	return
 }
 
-func extractFleetsFromDocV6(doc *goquery.Document, clock clockwork.Clock) (res []Fleet) {
+func extractFleetsFromDocV6(doc *goquery.Document, location *time.Location) (res []Fleet) {
 	res = make([]Fleet, 0)
 	script := doc.Find("body script").Text()
 	doc.Find("div.fleetDetails").Each(func(i int, s *goquery.Selection) {
@@ -1204,10 +1205,10 @@ func extractFleetsFromDocV6(doc *goquery.Document, clock clockwork.Clock) (res [
 		if startTimeStringExists {
 			startTimeArray := strings.Split(startTimeString, ":| ")
 			if len(startTimeArray) == 2 {
-				startTime, _ = time.Parse("02.01.2006<br>15:04:05", startTimeArray[1])
+				startTime, _ = time.ParseInLocation("02.01.2006<br>15:04:05", startTimeArray[1], location)
 			}
 		}
-		fleet.StartTime = startTime
+		fleet.StartTime = startTime.Local()
 
 		for i := 1; i < trs.Size()-5; i++ {
 			tds := trs.Eq(i).Find("td")
@@ -1257,7 +1258,7 @@ func extractServerTimeFromDocV6(doc *goquery.Document) (time.Time, error) {
 
 	u1 := time.Now().UTC().Unix()
 	u2 := serverTime.Unix()
-	n := int(math.Round(float64(u2-u1)/15)) * 15
+	n := int(math.Round(float64(u2-u1)/900)) * 900 // u2-u1 should be close to 0, round to nearest 15min difference
 
 	serverTime = serverTime.Add(time.Duration(-n) * time.Second).In(time.FixedZone("OGT", n))
 
@@ -1281,6 +1282,11 @@ func extractDisableOutlawWarningFromDocV6(doc *goquery.Document) bool {
 
 func extractMobileVersionFromDocV6(doc *goquery.Document) bool {
 	_, exists := doc.Find("input[name=mobileVersion]").Attr("checked")
+	return exists
+}
+
+func extractUrlaubsModus(doc *goquery.Document) bool {
+	_, exists := doc.Find("input[name=urlaubs_modus]").Attr("checked")
 	return exists
 }
 
@@ -1545,13 +1551,13 @@ func extractUserInfosV6(pageHTML []byte, lang string) (UserInfos, error) {
 	case "gr":
 		infosRgx = regexp.MustCompile(`([\d\\.]+) \(\\u039a\\u03b1\\u03c4\\u03ac\\u03c4\\u03b1\\u03be\\u03b7 ([\d.]+) \\u03b1\\u03c0\\u03cc ([\d.]+)\)`)
 	case "tw":
-		infosRgx = regexp.MustCompile(`([\d\\.]+) \(([\d.]+) \u4eba\u4e2d\u7684\u7b2c ([\d.]+) \u4f4d\)`)
+		infosRgx = regexp.MustCompile(`([\d\\.]+) \(([\d.]+) \\u4eba\\u4e2d\\u7684\\u7b2c ([\d.]+) \\u4f4d\)`)
 	case "cz":
 		infosRgx = regexp.MustCompile(`([\d\\.]+) \(Pozice ([\d.]+) z ([\d.]+)\)`)
 	case "de":
 		infosRgx = regexp.MustCompile(`([\d\\.]+) \(Platz ([\d.]+) von ([\d.]+)\)`)
 	case "es":
-		infosRgx = regexp.MustCompile(`([\d\\.]+) \(Lugar ([\d.]+) de ([\d.]+)\)`)
+		infosRgx = regexp.MustCompile(`([\d\\.]+) \(Posici\\u00f3n ([\d.]+) de ([\d.]+)\)`)
 	case "ar":
 		infosRgx = regexp.MustCompile(`([\d\\.]+) \(Lugar ([\d.]+) de ([\d.]+)\)`)
 	case "mx":
@@ -1576,6 +1582,8 @@ func extractUserInfosV6(pageHTML []byte, lang string) (UserInfos, error) {
 		infosRgx = regexp.MustCompile(`([\d\\.]+) \(Locul ([\d.]+) din ([\d.]+)\)`)
 	case "fi":
 		infosRgx = regexp.MustCompile(`([\d\\.]+) \(Sijoitus ([\d.]+) kaikista pelaajista ([\d.]+)\)`)
+	case "ba":
+		infosRgx = regexp.MustCompile(`([\d\\.]+) \(Mjesto ([\d.]+) od ([\d.]+)\)`)
 	case "ru":
 		infosRgx = regexp.MustCompile(`([\d\\.]+) \(\\u041c\\u0435\\u0441\\u0442\\u043e ([\d.]+) \\u0438\\u0437 ([\d.]+)\)`)
 	}
@@ -1647,7 +1655,7 @@ func extractCoordV6(v string) (coord Coordinate) {
 }
 
 func extractGalaxyInfosV6(pageHTML []byte, botPlayerName string, botPlayerID, botPlayerRank int64) (SystemInfos, error) {
-	prefixedNumRgx := regexp.MustCompile(`.*: ([\d.]+)`)
+	prefixedNumRgx := regexp.MustCompile(`.*: ([\d.,]+)`)
 
 	extractActivity := func(activityDiv *goquery.Selection) int64 {
 		var activity int64
@@ -1727,7 +1735,7 @@ func extractGalaxyInfosV6(pageHTML []byte, botPlayerName string, botPlayerID, bo
 			planetInfos.Name = planetName
 			planetInfos.Img = planetImg
 			planetInfos.Inactive = strings.Contains(classes, "inactive_filter")
-			planetInfos.StrongPlayer = strings.Contains(classes, "strong_filter")
+			planetInfos.StrongPlayer = s.Find("span.status_abbr_strong").Size() > 0
 			planetInfos.Newbie = strings.Contains(classes, "newbie_filter")
 			planetInfos.Vacation = strings.Contains(classes, "vacation_filter")
 			planetInfos.HonorableTarget = s.Find("span.status_abbr_honorableTarget").Size() > 0
@@ -1738,6 +1746,7 @@ func extractGalaxyInfosV6(pageHTML []byte, botPlayerName string, botPlayerID, bo
 			planetInfos.Player.IsStarlord = tdPlayername.HasClass("rank_starlord1") || tdPlayername.HasClass("rank_starlord2") || tdPlayername.HasClass("rank_starlord3")
 			planetInfos.Coordinate = extractCoordV6(coordsRaw)
 			planetInfos.Coordinate.Type = PlanetType
+			planetInfos.Date = time.Now()
 
 			var playerID int64
 			var playerName string
@@ -1755,11 +1764,11 @@ func extractGalaxyInfosV6(pageHTML []byte, botPlayerName string, botPlayerID, bo
 			if playerName == "" {
 				playerName := strings.TrimSpace(s.Find("td.playername").Find("span").Text())
 				if playerName == "" {
-					return
+					planetInfos.Destroyed = true
 				}
 			}
 
-			if playerID == 0 {
+			if !planetInfos.Destroyed && playerID == 0 {
 				playerID = botPlayerID
 				playerName = botPlayerName
 				playerRank = botPlayerRank
@@ -1808,7 +1817,7 @@ func extractPhalanxV6(pageHTML []byte) ([]Fleet, error) {
 	doc, _ := goquery.NewDocumentFromReader(bytes.NewReader(pageHTML))
 	eventFleet := doc.Find("div.eventFleet")
 	if eventFleet.Size() == 0 {
-		txt := doc.Find("div#phalanxEventContent").Text()
+		txt := strings.TrimSpace(doc.Find("div#phalanxEventContent").Text())
 		// TODO: 'fleet' and 'deuterium' won't work in other languages
 		if strings.Contains(txt, "fleet") {
 			return res, nil
@@ -1858,6 +1867,7 @@ func extractPhalanxV6(pageHTML []byte) ([]Fleet, error) {
 		fleet.Mission = MissionID(mission)
 		fleet.ReturnFlight = returning
 		fleet.ArriveIn = arriveIn
+		fleet.ArrivalTime = time.Unix(arrivalTime, 0)
 		fleet.Origin = extractCoordV6(originTxt)
 		fleet.Origin.Type = PlanetType
 		if originFleetFigure.HasClass("moon") {
@@ -1980,8 +1990,12 @@ func extractUniverseSpeedV6(pageHTML []byte) int64 {
 	return universeSpeed
 }
 
-var planetInfosRgx = regexp.MustCompile(`([^\[]+) \[(\d+):(\d+):(\d+)]([\d.,]+)(?i)(?:km|км|公里|χμ) \((\d+)/(\d+)\)(?:de|da|od|mellem|от)?\s*([-\d]+).+C\s*(?:bis|-tól|para|to|à|至|a|～|do|ile|tot|og|до|až|til|la|έως|:sta)\s*([-\d]+).+C`)
-var moonInfosRgx = regexp.MustCompile(`([^\[]+) \[(\d+):(\d+):(\d+)]([\d.]+)(?i)(?:km|км|χμ) \((\d+)/(\d+)\)`)
+var temperatureRgxStr = `([-\d]+).+C\s*(?:bis|-tól|para|to|à|至|a|～|do|ile|tot|og|до|až|til|la|έως|:sta)\s*([-\d]+).+C`
+var temperatureRgx = regexp.MustCompile(temperatureRgxStr)
+var diameterRgxStr = `([\d.,]+)(?i)(?:km|км|公里|χμ)`
+var diameterRgx = regexp.MustCompile(diameterRgxStr)
+var planetInfosRgx = regexp.MustCompile(`([^\[]+) \[(\d+):(\d+):(\d+)]` + diameterRgxStr + ` \((\d+)/(\d+)\)(?:de|da|od|mellem|от)?\s*` + temperatureRgxStr)
+var moonInfosRgx = regexp.MustCompile(`([^\[]+) \[(\d+):(\d+):(\d+)]([\d.,]+)(?i)(?:km|км|χμ|公里) \((\d+)/(\d+)\)`)
 var cpRgx = regexp.MustCompile(`&cp=(\d+)`)
 
 func extractPlanetFromSelectionV6(s *goquery.Selection, b *OGame) (Planet, error) {
@@ -2064,16 +2078,149 @@ func extractMoonFromSelectionV6(moonLink *goquery.Selection, b *OGame) (Moon, er
 	return moon, nil
 }
 
-func extractEmpire(html string, nbr int64) (interface{}, error) {
-	if nbr > 1 {
-		return nil, errors.New("invalid number for Empire page")
+func extractEmpire(pageHTML []byte) ([]EmpireCelestial, error) {
+	var out []EmpireCelestial
+	raw, err := extractEmpireJSON(pageHTML)
+	if err != nil {
+		return nil, err
 	}
-	m := regexp.MustCompile(`createImperiumHtml\("#mainWrapper",\s"#loading",\s(.*),\s\d+\s\);`).FindStringSubmatch(html)
+	j, ok := raw.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("failed to parse json")
+	}
+	planetsRaw, ok := j["planets"].([]interface{})
+	if !ok {
+		return nil, errors.New("failed to parse json")
+	}
+	for _, planetRaw := range planetsRaw {
+		planet, ok := planetRaw.(map[string]interface{})
+		if !ok {
+			return nil, errors.New("failed to parse json")
+		}
+
+		var tempMin, tempMax int64
+		temperatureStr := doCastStr(planet["temperature"])
+		m := temperatureRgx.FindStringSubmatch(temperatureStr)
+		if len(m) == 3 {
+			tempMin, _ = strconv.ParseInt(m[1], 10, 64)
+			tempMax, _ = strconv.ParseInt(m[2], 10, 64)
+		}
+		mm := diameterRgx.FindStringSubmatch(doCastStr(planet["diameter"]))
+		energyStr := doCastStr(planet["energy"])
+		energyDoc, _ := goquery.NewDocumentFromReader(strings.NewReader(energyStr))
+		energy := ParseInt(energyDoc.Find("div span").Text())
+		celestialType := CelestialType(doCastF64(planet["type"]))
+		out = append(out, EmpireCelestial{
+			Name:     doCastStr(planet["name"]),
+			ID:       CelestialID(doCastF64(planet["id"])),
+			Diameter: ParseInt(mm[1]),
+			Img:      doCastStr(planet["image"]),
+			Type:     celestialType,
+			Fields: Fields{
+				Built: int64(doCastF64(planet["fieldUsed"])),
+				Total: int64(doCastF64(planet["fieldMax"])),
+			},
+			Temperature: Temperature{
+				Min: tempMin,
+				Max: tempMax,
+			},
+			Coordinate: Coordinate{
+				Galaxy:   int64(doCastF64(planet["galaxy"])),
+				System:   int64(doCastF64(planet["system"])),
+				Position: int64(doCastF64(planet["position"])),
+				Type:     celestialType,
+			},
+			Resources: Resources{
+				Metal:     int64(doCastF64(planet["metal"])),
+				Crystal:   int64(doCastF64(planet["crystal"])),
+				Deuterium: int64(doCastF64(planet["deuterium"])),
+				Energy:    energy,
+			},
+			Supplies: ResourcesBuildings{
+				MetalMine:            int64(doCastF64(planet["1"])),
+				CrystalMine:          int64(doCastF64(planet["2"])),
+				DeuteriumSynthesizer: int64(doCastF64(planet["3"])),
+				SolarPlant:           int64(doCastF64(planet["4"])),
+				FusionReactor:        int64(doCastF64(planet["12"])),
+				SolarSatellite:       int64(doCastF64(planet["212"])),
+				MetalStorage:         int64(doCastF64(planet["22"])),
+				CrystalStorage:       int64(doCastF64(planet["23"])),
+				DeuteriumTank:        int64(doCastF64(planet["24"])),
+			},
+			Facilities: Facilities{
+				RoboticsFactory: int64(doCastF64(planet["14"])),
+				Shipyard:        int64(doCastF64(planet["21"])),
+				ResearchLab:     int64(doCastF64(planet["31"])),
+				AllianceDepot:   int64(doCastF64(planet["34"])),
+				MissileSilo:     int64(doCastF64(planet["44"])),
+				NaniteFactory:   int64(doCastF64(planet["15"])),
+				Terraformer:     int64(doCastF64(planet["33"])),
+				SpaceDock:       int64(doCastF64(planet["36"])),
+				LunarBase:       int64(doCastF64(planet["41"])),
+				SensorPhalanx:   int64(doCastF64(planet["42"])),
+				JumpGate:        int64(doCastF64(planet["43"])),
+			},
+			Defenses: DefensesInfos{
+				RocketLauncher:         int64(doCastF64(planet["401"])),
+				LightLaser:             int64(doCastF64(planet["402"])),
+				HeavyLaser:             int64(doCastF64(planet["403"])),
+				GaussCannon:            int64(doCastF64(planet["404"])),
+				IonCannon:              int64(doCastF64(planet["405"])),
+				PlasmaTurret:           int64(doCastF64(planet["406"])),
+				SmallShieldDome:        int64(doCastF64(planet["407"])),
+				LargeShieldDome:        int64(doCastF64(planet["408"])),
+				AntiBallisticMissiles:  int64(doCastF64(planet["502"])),
+				InterplanetaryMissiles: int64(doCastF64(planet["503"])),
+			},
+			Researches: Researches{
+				EnergyTechnology:             int64(doCastF64(planet["113"])),
+				LaserTechnology:              int64(doCastF64(planet["120"])),
+				IonTechnology:                int64(doCastF64(planet["121"])),
+				HyperspaceTechnology:         int64(doCastF64(planet["114"])),
+				PlasmaTechnology:             int64(doCastF64(planet["122"])),
+				CombustionDrive:              int64(doCastF64(planet["115"])),
+				ImpulseDrive:                 int64(doCastF64(planet["117"])),
+				HyperspaceDrive:              int64(doCastF64(planet["118"])),
+				EspionageTechnology:          int64(doCastF64(planet["106"])),
+				ComputerTechnology:           int64(doCastF64(planet["108"])),
+				Astrophysics:                 int64(doCastF64(planet["124"])),
+				IntergalacticResearchNetwork: int64(doCastF64(planet["123"])),
+				GravitonTechnology:           int64(doCastF64(planet["199"])),
+				WeaponsTechnology:            int64(doCastF64(planet["109"])),
+				ShieldingTechnology:          int64(doCastF64(planet["110"])),
+				ArmourTechnology:             int64(doCastF64(planet["111"])),
+			},
+			Ships: ShipsInfos{
+				LightFighter:   int64(doCastF64(planet["204"])),
+				HeavyFighter:   int64(doCastF64(planet["205"])),
+				Cruiser:        int64(doCastF64(planet["206"])),
+				Battleship:     int64(doCastF64(planet["207"])),
+				Battlecruiser:  int64(doCastF64(planet["215"])),
+				Bomber:         int64(doCastF64(planet["211"])),
+				Destroyer:      int64(doCastF64(planet["213"])),
+				Deathstar:      int64(doCastF64(planet["214"])),
+				SmallCargo:     int64(doCastF64(planet["202"])),
+				LargeCargo:     int64(doCastF64(planet["203"])),
+				ColonyShip:     int64(doCastF64(planet["208"])),
+				Recycler:       int64(doCastF64(planet["209"])),
+				EspionageProbe: int64(doCastF64(planet["210"])),
+				SolarSatellite: int64(doCastF64(planet["212"])),
+				Crawler:        int64(doCastF64(planet["217"])),
+				Reaper:         int64(doCastF64(planet["218"])),
+				Pathfinder:     int64(doCastF64(planet["219"])),
+			},
+		})
+	}
+	return out, nil
+}
+
+func extractEmpireJSON(pageHTML []byte) (interface{}, error) {
+	m := regexp.MustCompile(`createImperiumHtml\("#mainWrapper",\s"#loading",\s(.*),\s\d+\s\);`).FindSubmatch(pageHTML)
 	if len(m) != 2 {
 		return nil, errors.New("regexp for Empire JSON did not match anything")
 	}
 	var empireJSON interface{}
-	if err := json.Unmarshal([]byte(m[1]), &empireJSON); err != nil {
+	if err := json.Unmarshal(m[1], &empireJSON); err != nil {
 		return nil, err
 	}
 	return empireJSON, nil
@@ -2147,7 +2294,7 @@ func extractAuctionFromDoc(doc *goquery.Document) (Auction, error) {
 	auction.Inventory, _ = strconv.ParseInt(doc.Find("span.level.amount").Text(), 10, 64)
 	auction.CurrentItem = strings.ToLower(doc.Find("img").First().AttrOr("alt", ""))
 	auction.CurrentItemLong = strings.ToLower(doc.Find("div.image_140px").First().Find("a").First().AttrOr("title", ""))
-	multiplierRegex := regexp.MustCompile(`multiplier=([^;]+);`).FindStringSubmatch(doc.Text())
+	multiplierRegex := regexp.MustCompile(`multiplier\s?=\s?([^;]+);`).FindStringSubmatch(doc.Text())
 	if len(multiplierRegex) != 2 {
 		return Auction{}, errors.New("failed to find auction multiplier")
 	}
@@ -2156,14 +2303,14 @@ func extractAuctionFromDoc(doc *goquery.Document) (Auction, error) {
 	}
 
 	// Find auctioneer token
-	tokenRegex := regexp.MustCompile(`auctioneerToken="([^"]+)";`).FindStringSubmatch(doc.Text())
+	tokenRegex := regexp.MustCompile(`auctioneerToken\s?=\s?"([^"]+)";`).FindStringSubmatch(doc.Text())
 	if len(tokenRegex) != 2 {
 		return Auction{}, errors.New("failed to find auctioneer token")
 	}
 	auction.Token = tokenRegex[1]
 
 	// Find Planet / Moon resources JSON
-	planetMoonResources := regexp.MustCompile(`planetResources=([^;]+);`).FindStringSubmatch(doc.Text())
+	planetMoonResources := regexp.MustCompile(`planetResources\s?=\s?([^;]+);`).FindStringSubmatch(doc.Text())
 	if len(planetMoonResources) != 2 {
 		return Auction{}, errors.New("failed to find planetResources")
 	}
@@ -2172,7 +2319,15 @@ func extractAuctionFromDoc(doc *goquery.Document) (Auction, error) {
 	}
 
 	// Find already-bid
-	auction.AlreadyBid = ParseInt(doc.Find("table.table_ressources_sum tr td.auctionInfo.js_alreadyBidden").Text())
+	m := regexp.MustCompile(`var playerBid\s?=\s?([^;]+);`).FindStringSubmatch(doc.Text())
+	if len(m) != 2 {
+		return Auction{}, errors.New("failed to get playerBid")
+	}
+	var alreadyBid int64
+	if m[1] != "false" {
+		alreadyBid, _ = strconv.ParseInt(m[1], 10, 64)
+	}
+	auction.AlreadyBid = alreadyBid
 
 	// Find min-bid
 	auction.MinimumBid = ParseInt(doc.Find("table.table_ressources_sum tr td.auctionInfo.js_price").Text())
